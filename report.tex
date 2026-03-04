@@ -1,0 +1,171 @@
+\documentclass[12pt, a4paper]{report}
+
+% Packages for formatting and layout
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1.2in}
+\usepackage{graphicx}
+\usepackage{float} % Ensures images stay exactly where placed without overlapping text
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage[monochrome]{xcolor} % Forces black and white output
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\usepackage{eso-pic}
+\usepackage{hyperref} % For internal links and URLs
+
+% --- Page Border Setup ---
+\AddToShipoutPictureBG{%
+  \begin{tikzpicture}[remember picture, overlay]
+    \draw[line width=1pt]
+      ($(current page.south west) + (0.6in,0.6in)$)
+      rectangle
+      ($(current page.north east) + (-0.6in,-0.6in)$);
+  \end{tikzpicture}
+}
+
+% --- Title Page ---
+\title{\textbf{Project Report}\\Smart College Event Management System}
+\author{Omvsab IT Solution}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+% --- Chapter 1: Introduction ---
+\chapter{Introduction}
+
+\section{Problem Statement}
+Managing college events manually leads to widespread inefficiencies, particularly regarding venue allocation and resource management. Without a centralized digital system, scheduling overlapping events or double-booking crucial resources (such as seminar halls, auditoriums, projectors, and sound systems) creates significant administrative conflicts. Furthermore, information regarding upcoming events or activities is often fragmented across notice boards or group messages, leading to poor student participation and difficult administrative oversight. Additionally, the lack of real-time seat availability tracking results in overbooking and chaotic crowd management on the day of the event.
+
+\section{Objectives}
+The primary objective of this project is to develop the ``Smart College Event Management System (Smart EMS)'', a robust application that automates the entire event lifecycle on campus. Key objectives include:
+\begin{itemize}
+    \item Providing secure, role-based access control for Admins, Faculty members, and Students using JSON Web Tokens (JWT).
+    \item Developing an automated resource booking system to guarantee that venues and equipment are never double-booked for intersecting time slots.
+    \item Enabling seamless student participation through a centralized portal where students can browse upcoming events, track available seat capacity in real-time, and securely register for both free and paid events.
+    \item Providing robust capabilities such as QR code-based ticketing, email notifications for registration confirmations, and dynamically generated PDF analytic reports for administrative record-keeping.
+\end{itemize}
+
+\section{Scope of the Project}
+The scope encompasses a comprehensive full-stack web application designed with modern principles. It includes complete administrative workflows for event approval, resource management, and detailed analytics via interactive charts. Faculty users have streamlined workflows to request events, specify if they are paid or free (including dynamically managing event fees), and track student registrations. The backend guarantees secure transactions, strict permission hierarchies, and integrated communication loops via Nodemailer. The frontend delivers a highly responsive, mobile-friendly interface built with React.js.
+
+% --- Chapter 2: System Architecture \& Design ---
+\chapter{System Architecture and Database Design}
+
+\section{System Architecture}
+The system architecture implements a tightly integrated but decoupled client-server model. 
+\begin{itemize}
+    \item \textbf{Frontend (Client-Side):} Developed as a responsive Single Page Application (SPA) using React.js. React Router handles client-side navigation dynamically based on user roles, preventing unauthorized access at the UI layer. Data visualization is powered by Recharts, and QR Code interactions are handled through \texttt{html5-qrcode} and \texttt{react-qr-code}.
+    \item \textbf{Backend (Server-Side):} The backend is a fast, non-blocking REST API powered by Node.js and Express.js. This API dictates all business logic, securely maps User JWTs to roles, manages email dispatches via Nodemailer, constructs binary PDF streams using PDFKit, and computes availability matrices to throw alerts against double-booking.
+\end{itemize}
+
+\section{Database Design}
+Data persistence is managed using MySQL, a robust and scalable relational database system. The database (`college\_ems`) utilizes a fully normalized schema:
+\begin{itemize}
+    \item \textbf{Users Table:} Stores authentication credentials, distinct roles (admin, faculty, student), and profile information using \texttt{bcryptjs} for one-way password hashing.
+    \item \textbf{Events Table:} Captures critical parameters including event title, description, start/end timestamps, venue designation, seating capacity limits, status (pending vs. approved), and newly integrated attributes for paid events (`is\_paid` flag and `fee` constraint).
+    \item \textbf{Resources Table:} Catalogs the standing inventory of the college (e.g., lecture halls, smart projectors, auditorium seating) detailing total available, versus currently booked units.
+    \item \textbf{Registrations Table:} Functions as the core junction mapping students to events. It dynamically limits records based on remaining seat capacity. 
+\end{itemize}
+
+% --- Chapter 3: Implementation Details ---
+\chapter{Implementation Details}
+
+\section{Frontend Development (React.js Environment)}
+The frontend relies heavily on contemporary UI design systems to deliver an optimal aesthetic and functional experience across mobile devices and desktops.
+\begin{itemize}
+    \item \textbf{Role-Based Routing:} Upon successful login, the application evaluates the decoded JWT payload and routes the user to `/admin`, `/faculty`, or `/student` dashboards respectively, masking all unauthorized navigation links.
+    \item \textbf{Student Portal \& Interaction:} Students dynamically filter upcoming events displayed on beautifully animated event cards. For ticketing, the system utilizes \texttt{react-qr-code} to render unique identifiable registration QR tickets. The ``My Tickets'' dashboard centralizes their upcoming commitments.
+    \item \textbf{Analytics Dashboard:} For administrative users, Recharts integrates real-time database inputs to map monthly event statistics and overall resource utilization charts across dynamic UI components.
+\end{itemize}
+
+\section{Backend Logic and Express Middleware}
+The standard Node.js API acts as the secure intermediary bridging the database and user interfaces.
+\begin{itemize}
+    \item \textbf{Conflict Prevention Engine:} When faculty submit new events, custom controllers query required inventory versus booked inventory within the exact mathematical time boundaries of the request. Resource shortages result in an automatic rejection to preserve inventory integrity.
+    \item \textbf{Automated Communication:} Nodemailer integrates with the college's SMTP credentials to fire asynchronous HTML emails ensuring students instantly receive registration receipts and notifications if an event status changes.
+    \item \textbf{Transactions and Paid Events Module:} Registration controllers assess if an event carries the \texttt{is\_paid} boolean. While checking current capacity against `total\_seats`, simulated payment logic ensures the application securely captures fee obligations before finalizing registration statuses.
+\end{itemize}
+
+\section{Security \& API Integration}
+Axios HTTP client dynamically attaches Bearer Tokens (`Authorization` header) to every outbound request. Broad Cross-Origin Resource Sharing (CORS) rules were tightly specified to allow secure access strictly from the frontend origin, fortifying the integration.
+
+% --- Chapter 4: Testing \& Quality Assurance ---
+\chapter{Testing and Results}
+
+\section{Primary Test Scenarios}
+Comprehensive testing included manual frontend workflows and strict automated backend validation scenarios:
+\begin{itemize}
+    \item \textbf{JWT \& Role Authentication Validation:} Deliberately testing expired and forged tokens validated that the backend accurately drops corrupt connections with a \texttt{401 Unauthorized} status. Role hierarchy testing confirmed students cannot access `/api/reports` endpoints.
+    \item \textbf{Concurrency and Overbooking Limits:} Tested registration behavior specifically on an event strictly capped at 2 seats. The third simultaneous submission correctly failed, returning a custom "Event Full" exception message.
+    \item \textbf{Advanced Resource Allocation:} Verified that scheduling two separate events requesting the "Main Auditorium" from 10:00 AM to 12:00 PM blocked the second request, preserving the integrity of the college's venue inventory.
+\end{itemize}
+
+\section{System Performance}
+Visual validation confirmed the frontend remains cohesive down to 320px mobile viewport widths. API latency under simulated loads (e.g., PDF generation and parallel email processing) remained highly stable. Real-time visual charts appropriately rendered multi-dimensional data without frontend halting.
+
+\vspace{1cm}
+% UI SCREENSHOT PLACEHOLDERS - Using [H] prevents overlapping
+\subsection*{User Interface Screenshots}
+
+\begin{figure}[H]
+    \centering
+    \framebox(300, 200){UI Screenshot 1: Admin Dashboard with Recharts Analytics}
+    \caption{Visualizing Monthly Event Counts and Resource Utilization}
+\end{figure}
+
+\vspace{1cm}
+
+\begin{figure}[H]
+    \centering
+    \framebox(300, 200){UI Screenshot 2: Student Event Portal and QR Ticket}
+    \caption{Student View displaying Active Registrations and Registration QR Code}
+\end{figure}
+
+% --- Chapter 5: Conclusion ---
+\chapter{Conclusion and Future Scope}
+
+\section{Summary}
+The Smart College Event Management System effectively transitions conventional, paper-based college events into a centralized digital realm. Through precise integration of React.js, Node.js, and MySQL, the platform provides seamless user workflows and comprehensive, role-dependent utilities. It completely eliminates double-booking chaos via intelligent queries, facilitates immediate student engagement via mobile-ready portals, implements QR Code technology for rapid physical event entry, and automates mundane administrative reporting into one-click PDF extracts. 
+
+\section{Future Enhancements}
+Future development lifecycles could introduce:
+\begin{itemize}
+    \item \textbf{Direct Payment Gateway Integration:} Bridging existing `is\_paid` infrastructure with live Stripe/Razorpay endpoints to finalize and process capital directly.
+    \item \textbf{Native Mobile Applications:} Migrating React infrastructure over to React Native to deliver app-store-ready iOS and Android clients with native capability features.
+    \item \textbf{Live WebSockets:} Transitioning some HTTP polling logic into persistent WebSocket connections for real-time notification pushes on event approvals.
+\end{itemize}
+
+% --- Chapter 6: References ---
+\chapter{References}
+\begin{enumerate}
+    \item React.js Official Documentation (https://reactjs.org/docs/getting-started.html).
+    \item Node.js Official Documentation (https://nodejs.org/en/docs/).
+    \item JSON Web Token Security Fundamentals (https://jwt.io/introduction).
+    \item Recharts Line and Pie Chart Implementations (https://recharts.org).
+    \item HTML5 QR Code Scanner Library Specifications.
+\end{enumerate}
+
+% --- Chapter 7: Appendices ---
+\chapter{Appendices}
+\noindent
+\textbf{Appendix A: Schema Complexities} \\
+The database model ensures referential integrity via cascading inner-joins traversing `events`, `users`, and custom pivot tables allowing for absolute prevention of orphaned records when administrative deletes occur.\\
+
+\vspace{0.5cm}
+\noindent
+\textbf{Appendix B: RESTful Structure} \\
+Organized around distinct routes including `/api/auth`, `/api/events`, `/api/resources`, and `/api/reports`. The PDF generator constructs a binary output stream formatted via \texttt{PDFKit} directly to the administrator's local machine bypassing physical storage overhead.
+
+% --- Chapter 8: Annexure ---
+\chapter{Annexure – Progress Sheet}
+\textbf{Project Title:} Smart College Event Management System \\
+\textbf{Developer:} Omvsab IT Solution \\
+\textbf{Status:} Completed. All requested core and advanced operational modules—including real-time mathematical conflict detection, paid event processing, analytics charting, QR ticketing algorithms, and role restrictions—are fully integrated and robust.
+
+\end{document}
