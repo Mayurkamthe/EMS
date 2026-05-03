@@ -1,8 +1,8 @@
-const db = require('../config/db');
+const { Resource } = require('../models');
 
 exports.getResources = async (req, res) => {
   try {
-    const [resources] = await db.query('SELECT * FROM resources ORDER BY name');
+    const resources = await Resource.findAll({ order: [['name', 'ASC']] });
     res.json(resources);
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
@@ -12,8 +12,7 @@ exports.getResources = async (req, res) => {
 exports.createResource = async (req, res) => {
   try {
     const { name, type, total_quantity, description } = req.body;
-    await db.query('INSERT INTO resources (name, type, total_quantity, description) VALUES (?,?,?,?)',
-      [name, type, total_quantity, description]);
+    await Resource.create({ name, type, total_quantity, description });
     res.status(201).json({ message: 'Resource created' });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
@@ -22,9 +21,10 @@ exports.createResource = async (req, res) => {
 
 exports.updateResource = async (req, res) => {
   try {
+    const resource = await Resource.findByPk(req.params.id);
+    if (!resource) return res.status(404).json({ message: 'Resource not found' });
     const { name, type, total_quantity, description } = req.body;
-    await db.query('UPDATE resources SET name=?, type=?, total_quantity=?, description=? WHERE id=?',
-      [name, type, total_quantity, description, req.params.id]);
+    await resource.update({ name, type, total_quantity, description });
     res.json({ message: 'Resource updated' });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
@@ -33,7 +33,9 @@ exports.updateResource = async (req, res) => {
 
 exports.deleteResource = async (req, res) => {
   try {
-    await db.query('DELETE FROM resources WHERE id=?', [req.params.id]);
+    const resource = await Resource.findByPk(req.params.id);
+    if (!resource) return res.status(404).json({ message: 'Resource not found' });
+    await resource.destroy();
     res.json({ message: 'Resource deleted' });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });

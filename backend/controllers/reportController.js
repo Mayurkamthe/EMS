@@ -1,33 +1,33 @@
-const db = require('../config/db');
+const { Op, fn, col, literal } = require('sequelize');
+const { Event, User, Resource, EventResource, Registration } = require('../models');
 const PDFDocument = require('pdfkit');
 
 exports.getDashboardStats = async (req, res) => {
   try {
-    const [[totalEvents]] = await db.query('SELECT COUNT(*) as count FROM events');
-    const [[totalResources]] = await db.query('SELECT COUNT(*) as count FROM resources');
-    const [[pendingApprovals]] = await db.query('SELECT COUNT(*) as count FROM events WHERE status = "pending"');
-    const [upcomingEvents] = await db.query(
-      'SELECT * FROM events WHERE status = "approved" AND date >= CURDATE() ORDER BY date LIMIT 5'
-    );
-    const [monthlyCount] = await db.query(
-      `SELECT MONTHNAME(date) as month, COUNT(*) as count 
-       FROM events WHERE YEAR(date) = YEAR(CURDATE()) GROUP BY MONTH(date), MONTHNAME(date) ORDER BY MONTH(date)`
-    );
-    const [mostUsedResources] = await db.query(
-      `SELECT r.name, COUNT(er.id) as usage_count FROM event_resources er 
-       JOIN resources r ON er.resource_id = r.id GROUP BY r.id ORDER BY usage_count DESC LIMIT 5`
-    );
-    const [[totalStudents]] = await db.query('SELECT COUNT(*) as count FROM users WHERE role="student"');
+    const [totalEvents, totalResources, pendingApprovals, upcomingEvents, monthlyCount, mostUsedResources, totalStudents] = await Promise.all([
+      Event.count(),
+      Resource.count(),
+      Event.count({ where: { status: 'pending' } }),
+      Event.findAll({ where: { status: 'approved', date: { [Op.gte]: new Date() } }, order: [['date', 'ASC']], limit: 5 }),
+      Event.findAll({
+        attributes: [[fn('MONTHNAME', col('date')), 'month'], [fn('COUNT', col('id')), 'count']],
+        where: literal('YEAR(date) = YEAR(CURDATE())'),
+        group: [fn('MONTH', col('date')), fn('MONTHNAME', col('date'))],
+        order: [[fn('MONTH', col('date')), 'ASC']],
+        raw: true,
+      }),
+      EventResource.findAll({
+        attributes: [[fn('COUNT', col('EventResource.id')), 'usage_count']],
+        include: [{ model: Resource, attributes: ['name'] }],
+        group: ['resource_id', 'Resource.id'],
+        order: [[literal('usage_count'), 'DESC']],
+        limit: 5,
+        raw: true,
+      }),
+      User.count({ where: { role: 'student' } }),
+    ]);
 
-    res.json({
-      totalEvents: totalEvents.count,
-      totalResources: totalResources.count,
-      pendingApprovals: pendingApprovals.count,
-      upcomingEvents,
-      monthlyCount,
-      mostUsedResources,
-      totalStudents: totalStudents.count
-    });
+    res.json({ totalEvents, totalResources, pendingApprovals, upcomingEvents, monthlyCount, mostUsedResources, totalStudents });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -35,24 +35,27 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.generateReport = async (req, res) => {
   try {
-    const [events] = await db.query(
-      `SELECT e.*, u.name as creator_name, 
-       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) as reg_count
-       FROM events e JOIN users u ON e.created_by = u.id ORDER BY e.date DESC`
-    );
+    const events = await Event.findAll({
+      include: [
+        { model: User, as: 'creator', attributes: ['name'] },
+        { model: Registration, attributes: [] },
+      ],
+      attributes: { include: [[fn('COUNT', col('Registrations.id')), 'reg_count']] },
+      group: ['Event.id', 'creator.id'],
+      order: [['date', 'DESC']],
+      raw: true,
+    });
 
     const doc = new PDFDocument({ margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename=events-report.pdf');
     doc.pipe(res);
 
-    // Title
     doc.fontSize(20).font('Helvetica-Bold').text('Smart College EMS - Events Report', { align: 'center' });
     doc.moveDown(0.5);
     doc.fontSize(10).font('Helvetica').text(`Generated: ${new Date().toLocaleDateString()}`, { align: 'center' });
     doc.moveDown(1);
 
-    // Summary
     const approved = events.filter(e => e.status === 'approved').length;
     const pending = events.filter(e => e.status === 'pending').length;
     const rejected = events.filter(e => e.status === 'rejected').length;
@@ -62,17 +65,14 @@ exports.generateReport = async (req, res) => {
     doc.text(`Total Events: ${events.length}`);
     doc.text(`Approved: ${approved}  |  Pending: ${pending}  |  Rejected: ${rejected}`);
     doc.moveDown(1);
-
-    // Events table
     doc.fontSize(12).font('Helvetica-Bold').text('Events List');
     doc.moveDown(0.5);
 
     events.forEach((event, i) => {
-      const statusColor = event.status === 'approved' ? 'green' : event.status === 'rejected' ? 'red' : 'orange';
       doc.fontSize(10).font('Helvetica-Bold').text(`${i + 1}. ${event.title}`);
       doc.font('Helvetica').fontSize(9)
         .text(`   Date: ${new Date(event.date).toLocaleDateString()} | Time: ${event.time} - ${event.end_time}`)
-        .text(`   Created by: ${event.creator_name} | Status: ${event.status.toUpperCase()}`)
+        .text(`   Created by: ${event['creator.name']} | Status: ${event.status.toUpperCase()}`)
         .text(`   Registrations: ${event.reg_count} / ${event.total_seats} seats`);
       doc.moveDown(0.3);
     });
@@ -85,7 +85,10 @@ exports.generateReport = async (req, res) => {
 
 exports.getUsers = async (req, res) => {
   try {
-    const [users] = await db.query('SELECT id, name, email, role, created_at FROM users ORDER BY role, name');
+    const users = await User.findAll({
+      attributes: ['id', 'name', 'email', 'role', 'created_at'],
+      order: [['role', 'ASC'], ['name', 'ASC']],
+    });
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
