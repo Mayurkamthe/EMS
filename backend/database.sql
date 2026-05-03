@@ -63,10 +63,6 @@ CREATE TABLE IF NOT EXISTS registrations (
   FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Insert default admin
-INSERT INTO users (name, email, password, role) VALUES
-('Admin User', 'admin@college.edu', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin');
--- Default password: 'password'
 
 -- Insert sample resources
 INSERT INTO resources (name, type, total_quantity, description) VALUES
